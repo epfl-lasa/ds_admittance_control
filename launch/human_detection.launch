@@ -1,0 +1,12 @@
+<?xml version="1.0" ?>
+<launch>
+
+
+  <group ns="human_detection">
+    <param name="topic_external_force" value="/lwr/ee_ft"/>
+    <param name="topic_human_force" value="/admittance/human_force"/>
+    <!-- <rosparam command="load" file="$(find ds_admittance_control)/config/polishing_init_param.yml"/>    -->
+    <node name="human_detection" pkg="ds_admittance_control" type="human_detection_node" output="screen"/>
+  </group>
+
+</launch>
