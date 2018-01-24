@@ -16,10 +16,12 @@
 
 
 #include "eigen3/Eigen/Core"
+#include "eigen3/Eigen/Geometry"
+#include "eigen3/Eigen/Dense"
 using namespace Eigen;
 
 typedef Matrix<double, 6, 1> Vector6d;
-
+typedef Matrix<double,6,6> Matrix6d;
 
 class PowerPassFilter {
 
@@ -37,6 +39,18 @@ private:
 	Vector6d wrench_input_;
 	Vector6d wrench_output_;
 
+	Vector6d simulated_velocity_;
+
+	double input_power_;
+	double output_power_;
+	double drain_power_;
+	double tank_energy_;
+
+
+
+	// params
+	Matrix6d M_f_, D_f_;
+
 
 public:
 	PowerPassFilter(
@@ -53,6 +67,9 @@ private:
 
 	void UpdateInputWrench(const geometry_msgs::Wrench::ConstPtr& msg);
 	void PublishOutputWrench();
+	void SimulateVelocity();
+	void UpdateEnergyTank();
+	void ComputeFilteredWrench();
 
 
 
