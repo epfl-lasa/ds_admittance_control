@@ -11,8 +11,8 @@
 #include "ros/ros.h"
 #include <vector>
 
-// #include <dynamic_reconfigure/server.h>
-// #include <adaptive_polishing/polishing_paramsConfig.h>
+#include <dynamic_reconfigure/server.h>
+#include <ds_admittance_control/PowerPassFilterConfig.h>
 
 
 #include "eigen3/Eigen/Core"
@@ -21,7 +21,7 @@
 using namespace Eigen;
 
 typedef Matrix<double, 6, 1> Vector6d;
-typedef Matrix<double,6,6> Matrix6d;
+typedef Matrix<double, 6, 6> Matrix6d;
 
 class PowerPassFilter {
 
@@ -30,6 +30,7 @@ private:
 	// ROS
 	ros::NodeHandle nh_;
 	ros::Rate loop_rate_;
+	ros::Duration real_loop_rate_;
 
 
 	ros::Subscriber sub_input_wrench_;
@@ -52,6 +53,11 @@ private:
 	Matrix6d M_f_, D_f_;
 
 
+	//dynamic reconfig settig
+	dynamic_reconfigure::Server<ds_admittance_control::PowerPassFilterConfig> dyn_rec_srv_;
+	dynamic_reconfigure::Server<ds_admittance_control::PowerPassFilterConfig>::CallbackType dyn_rec_f_;
+
+
 public:
 	PowerPassFilter(
 	    ros::NodeHandle &n,
@@ -70,6 +76,7 @@ private:
 	void SimulateVelocity();
 	void UpdateEnergyTank();
 	void ComputeFilteredWrench();
+	void DynRecCallback(ds_admittance_control::PowerPassFilterConfig &config, uint32_t level);
 
 
 

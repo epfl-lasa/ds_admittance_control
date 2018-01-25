@@ -9,4 +9,6 @@
     <node name="human_detection" pkg="ds_admittance_control" type="human_detection_node" output="screen"/>
   </group>
 
+  <node name="reconfigure" pkg="rqt_reconfigure" type="rqt_reconfigure" output="screen" />
+
 </launch>

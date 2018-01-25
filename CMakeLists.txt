@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
+  dynamic_reconfigure
 )
 
 ## System dependencies are found with CMake's conventions
@@ -92,6 +93,10 @@ find_package(catkin REQUIRED COMPONENTS
 #   cfg/DynReconf1.cfg
 #   cfg/DynReconf2.cfg
 # )
+
+generate_dynamic_reconfigure_options(
+  cfg/PowerPassFilter.cfg
+)
 
 ###################################
 ## catkin specific configuration ##

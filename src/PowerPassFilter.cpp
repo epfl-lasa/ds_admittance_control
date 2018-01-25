@@ -8,7 +8,8 @@ PowerPassFilter::PowerPassFilter(
 )
 	:
 	nh_(n),
-	loop_rate_(frequency)
+	loop_rate_(frequency),
+	real_loop_rate_(1 / frequency)
 {
 
 
@@ -18,6 +19,10 @@ PowerPassFilter::PowerPassFilter(
 
 	pub_output_wrench_ = nh_.advertise<geometry_msgs::Wrench>(topic_output_wrench, 1);
 
+
+
+	dyn_rec_f_ = boost::bind(&PowerPassFilter::DynRecCallback, this, _1, _2);
+	dyn_rec_srv_.setCallback(dyn_rec_f_);
 
 
 	wrench_input_.setZero();
@@ -33,10 +38,13 @@ PowerPassFilter::PowerPassFilter(
 
 	M_f_.setIdentity();
 	D_f_.setIdentity();
+
 }
 
 
-
+void PowerPassFilter::DynRecCallback(ds_admittance_control::PowerPassFilterConfig &config, uint32_t level){
+	
+}
 
 
 
@@ -57,7 +65,7 @@ void PowerPassFilter::Run() {
 
 
 
-
+		ROS_INFO_STREAM_THROTTLE(1, "Running at             : " << real_loop_rate_.toSec());
 		ROS_INFO_STREAM_THROTTLE(1, "Simulated inpout power : " << input_power_);
 		ROS_INFO_STREAM_THROTTLE(1, "Tanks energy           : " << tank_energy_);
 		ROS_INFO_STREAM_THROTTLE(1, "output power           : " << output_power_);
@@ -70,7 +78,7 @@ void PowerPassFilter::Run() {
 		                         wrench_input_(4) << "\t" <<
 		                         wrench_input_(5) );
 
-		ROS_INFO_STREAM_THROTTLE(1, "output Wrench           : " <<
+		ROS_INFO_STREAM_THROTTLE(1, "output Wrench          : " <<
 		                         wrench_output_(0) << "\t" <<
 		                         wrench_output_(1) << "\t" <<
 		                         wrench_output_(2) << "\t" <<
@@ -83,6 +91,8 @@ void PowerPassFilter::Run() {
 
 
 		loop_rate_.sleep();
+		// Integrate for velocity based interface
+		real_loop_rate_ = loop_rate_.expectedCycleTime();
 	}
 }
 
@@ -103,10 +113,9 @@ void PowerPassFilter::SimulateVelocity() {
 	// 	simulated_acceleration.segment(0, 3) *= (acc_linear_max / acc_linear_norm);
 	// }
 
-	// Integrate for velocity based interface
-	ros::Duration duration = loop_rate_.expectedCycleTime();
 
-	simulated_velocity_ += simulated_acceleration * duration.toSec();
+
+	simulated_velocity_ += simulated_acceleration * real_loop_rate_.toSec();
 
 
 	input_power_ = simulated_velocity_.dot(wrench_input_);
@@ -115,7 +124,7 @@ void PowerPassFilter::SimulateVelocity() {
 
 void PowerPassFilter::UpdateEnergyTank() {
 
-	tank_energy_ += input_power_  - output_power_ - drain_power_;
+	tank_energy_ += (input_power_  - output_power_ - drain_power_ ) * real_loop_rate_.toSec();
 
 	// stay positive
 	tank_energy_ = (tank_energy_ < 0) ? 0 : tank_energy_;
@@ -127,19 +136,16 @@ void PowerPassFilter::UpdateEnergyTank() {
 
 void PowerPassFilter::ComputeFilteredWrench() {
 
-	if (tank_energy_ > 500) {
-		double alpha = (tank_energy_ - 500 ) / 10;
+	if (tank_energy_ > 10) {
+		double alpha = (tank_energy_ - 10 ) / 1;
 		alpha = (alpha > 1) ? 1 : alpha;
 		output_power_ = alpha * input_power_;
-		wrench_output_ = output_power_ * simulated_velocity_.cwiseInverse();
+		wrench_output_ = (output_power_ / input_power_) * wrench_input_;
 	}
 	else {
 		output_power_ = 0;
 		wrench_output_.setZero();
-
 	}
-
-
 
 
 }
