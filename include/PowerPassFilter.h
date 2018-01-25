@@ -3,6 +3,8 @@
 
 
 #include "geometry_msgs/Wrench.h"
+#include "geometry_msgs/WrenchStamped.h"
+#include "geometry_msgs/Twist.h"
 
 // #include "geometry_msgs/Pose2D.h"
 // #include "std_msgs/Int32.h"
@@ -35,12 +37,14 @@ private:
 
 	ros::Subscriber sub_input_wrench_;
 	ros::Publisher  pub_output_wrench_;
+	ros::Publisher  pub_desired_velocity_;
 
 
 	Vector6d wrench_input_;
 	Vector6d wrench_output_;
 
 	Vector6d simulated_velocity_;
+	Vector6d desired_velocity_;
 
 	double input_power_;
 	double output_power_;
@@ -78,7 +82,8 @@ public:
 	    ros::NodeHandle &n,
 	    double frequency,
 	    std::string topic_input_wrench,
-	    std::string topic_output_wrench
+	    std::string topic_output_wrench,
+	    std::string topic_desired_velocity
 	);
 
 	void Run();
@@ -86,13 +91,14 @@ public:
 
 private:
 
-	void UpdateInputWrench(const geometry_msgs::Wrench::ConstPtr& msg);
+	void UpdateInputWrench(const geometry_msgs::WrenchStamped::ConstPtr& msg);
 	void PublishOutputWrench();
 	void SimulateVelocity();
 	void UpdateEnergyTank();
 	void ComputeFilteredWrench();
 	void DynRecCallback(ds_admittance_control::PowerPassFilterConfig &config, uint32_t level);
-
+	void ComputeAdmittance();
+	void PublishDesiredVelocity();
 
 
 

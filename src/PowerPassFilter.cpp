@@ -4,7 +4,8 @@ PowerPassFilter::PowerPassFilter(
     ros::NodeHandle &n,
     double frequency,
     std::string topic_input_wrench,
-    std::string topic_output_wrench
+    std::string topic_output_wrench,
+    std::string topic_desired_velocity
 )
 	:
 	nh_(n),
@@ -19,6 +20,7 @@ PowerPassFilter::PowerPassFilter(
 
 	pub_output_wrench_ = nh_.advertise<geometry_msgs::Wrench>(topic_output_wrench, 1);
 
+	pub_desired_velocity_ = nh_.advertise<geometry_msgs::Twist>(topic_desired_velocity, 1);
 
 
 	dyn_rec_f_ = boost::bind(&PowerPassFilter::DynRecCallback, this, _1, _2);
@@ -29,6 +31,7 @@ PowerPassFilter::PowerPassFilter(
 	wrench_output_.setZero();
 
 	simulated_velocity_.setZero();
+	desired_velocity_.setZero();
 
 	input_power_ = 0;
 
@@ -68,7 +71,10 @@ void PowerPassFilter::Run() {
 
 		PublishOutputWrench();
 
-		ros::spinOnce();
+		ComputeAdmittance();
+
+		PublishDesiredVelocity();
+
 
 
 
@@ -96,6 +102,7 @@ void PowerPassFilter::Run() {
 		ROS_INFO_STREAM_THROTTLE(1, "-------------------------------------------");
 
 
+		ros::spinOnce();
 		loop_rate_.sleep();
 		// Integrate for velocity based interface
 		real_loop_rate_ = loop_rate_.expectedCycleTime();
@@ -149,9 +156,6 @@ void PowerPassFilter::SimulateVelocity() {
 	}
 
 
-
-
-
 	input_power_ = simulated_velocity_.dot(wrench_input_);
 
 }
@@ -172,7 +176,12 @@ void PowerPassFilter::ComputeFilteredWrench() {
 		double alpha = (tank_energy_ - energy_trigger_ ) / (tank_size_ - energy_trigger_);
 		alpha = (alpha > 1) ? 1 : alpha;
 		output_power_ = alpha * input_power_;
-		wrench_output_ = (output_power_ / input_power_) * wrench_input_;
+		if (input_power_ != 0) {
+			wrench_output_ = (output_power_ / input_power_) * wrench_input_;
+		}
+		else {
+			wrench_output_.setZero();
+		}
 	}
 	else {
 		output_power_ = 0;
@@ -182,12 +191,65 @@ void PowerPassFilter::ComputeFilteredWrench() {
 }
 
 
-void PowerPassFilter::UpdateInputWrench(const geometry_msgs::Wrench::ConstPtr& msg) {
+void PowerPassFilter::ComputeAdmittance() {
+	Vector6d acceleration;
+
+	acceleration = M_f_.inverse() * (- D_f_ * desired_velocity_ + wrench_output_);
+
+
+	// limiting the accelaration for better stability and safety
+	double acc_linear_norm = (acceleration.segment(0, 3)).norm();
+
+	if (acc_linear_norm > acc_linear_max_) {
+		ROS_WARN_STREAM_THROTTLE(1, "high simulated linear acceleration"
+		                         << " norm: " << acc_linear_norm);
+		acceleration.segment(0, 3) *= (acc_linear_max_ / acc_linear_norm);
+	}
+
+	double acc_angular_norm = (acceleration.segment(3, 3)).norm();
+
+	if (acc_angular_norm > acc_angular_max_) {
+		ROS_WARN_STREAM_THROTTLE(1, "high simulated angular acceleration"
+		                         << " norm: " << acc_angular_norm);
+		acceleration.segment(3, 3) *= (acc_angular_max_ / acc_angular_norm);
+	}
+
+
+	desired_velocity_ += acceleration * real_loop_rate_.toSec();
+
+
+	// limiting the velocities for better stability and safety
+	double vel_linear_norm = (desired_velocity_.segment(0, 3)).norm();
+
+	if (vel_linear_norm > vel_linear_max_) {
+		ROS_WARN_STREAM_THROTTLE(1, "high simulated linear velocity"
+		                         << " norm: " << vel_linear_norm);
+		desired_velocity_.segment(0, 3) *= (vel_linear_max_ / vel_linear_norm);
+	}
+
+	double vel_angular_norm = (desired_velocity_.segment(3, 3)).norm();
+
+	if (vel_angular_norm > vel_angular_max_) {
+		ROS_WARN_STREAM_THROTTLE(1, "high simulated angular velocity"
+		                         << " norm: " << vel_angular_norm);
+		desired_velocity_.segment(3, 3) *= (vel_angular_max_ / vel_angular_norm);
+	}
+
+	// maybe this power can be useful to regulate some behavior
+	// final_input_power_ = desired_velocity_.dot(wrench_output_);	
+	// final_input_power_ = real_velocity_.dot(wrench_output_);
+
+}
+
+
+
+
+void PowerPassFilter::UpdateInputWrench(const geometry_msgs::WrenchStamped::ConstPtr& msg) {
 	Vector6d raw_input;
 
-	raw_input << msg->force.x, msg->force.y,
-	          msg->force.z, msg->torque.x,
-	          msg->torque.y, msg->torque.z;
+	raw_input << msg->wrench.force.x, msg->wrench.force.y,
+	          msg->wrench.force.z, msg->wrench.torque.x,
+	          msg->wrench.torque.y, msg->wrench.torque.z;
 
 	// Dead zone for the FT sensor
 	if (raw_input.topRows(3).norm() < force_dead_zone_) {
@@ -215,6 +277,19 @@ void PowerPassFilter::PublishOutputWrench() {
 
 	pub_output_wrench_.publish(msg);
 
+}
+
+void PowerPassFilter::PublishDesiredVelocity(){
+
+	geometry_msgs::Twist msg;
+	msg.linear.x = desired_velocity_(0);
+	msg.linear.y = desired_velocity_(1);
+	msg.linear.z = desired_velocity_(2);
+	msg.angular.x = desired_velocity_(3);
+	msg.angular.y = desired_velocity_(4);
+	msg.angular.z = desired_velocity_(5);
+
+	pub_desired_velocity_.publish(msg);
 }
 
 

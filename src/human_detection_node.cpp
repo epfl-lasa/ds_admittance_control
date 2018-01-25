@@ -9,11 +9,9 @@ int main(int argc, char **argv)
 
 
   // Parameters
-  //inputs
   std::string topic_external_wrench;
-
-  //outputs
   std::string topic_human_wrench;
+  std::string topic_desired_velocity;
 
 
   if (!nh.getParam("topic_external_wrench", topic_external_wrench))   {
@@ -27,10 +25,18 @@ int main(int argc, char **argv)
   }
 
 
+
+  if (!nh.getParam("topic_desired_velocity", topic_desired_velocity))   {
+    ROS_ERROR("Couldn't retrieve the topic name for the desired velocity. ");
+    return -1;
+  }
+
+
   PowerPassFilter human_detector(nh,
                                  frequency,
                                  topic_external_wrench,
-                                 topic_human_wrench);
+                                 topic_human_wrench,
+                                 topic_desired_velocity);
 
   human_detector.Run();
 
