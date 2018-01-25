@@ -64,6 +64,11 @@ private:
 	double torque_dead_zone_;
 	double filter_rate_;
 
+	double acc_linear_max_;
+	double acc_angular_max_;
+	double vel_linear_max_;
+	double vel_angular_max_;
+
 
 
 

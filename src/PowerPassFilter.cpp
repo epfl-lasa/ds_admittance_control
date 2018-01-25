@@ -47,6 +47,11 @@ PowerPassFilter::PowerPassFilter(
 	torque_dead_zone_ = 0.5;
 	filter_rate_ = 0.1;
 
+	acc_linear_max_ = 4;
+	acc_angular_max_ = 1;
+	vel_linear_max_ = 0.5;
+	vel_angular_max_ = 1;
+
 }
 
 
@@ -106,16 +111,45 @@ void PowerPassFilter::SimulateVelocity() {
 
 
 	// limiting the accelaration for better stability and safety
-	// double acc_linear_norm = (simulated_acceleration.segment(0, 3)).norm();
+	double acc_linear_norm = (simulated_acceleration.segment(0, 3)).norm();
 
-	// if (acc_linear_norm > acc_linear_max) {
-	// 	ROS_WARN_STREAM_THROTTLE(1, "high simulated linear acceleration"
-	// 	                         << " norm: " << p_acc_norm);
-	// 	simulated_acceleration.segment(0, 3) *= (acc_linear_max / acc_linear_norm);
-	// }
+	if (acc_linear_norm > acc_linear_max_) {
+		ROS_WARN_STREAM_THROTTLE(1, "high simulated linear acceleration"
+		                         << " norm: " << acc_linear_norm);
+		simulated_acceleration.segment(0, 3) *= (acc_linear_max_ / acc_linear_norm);
+	}
+
+	double acc_angular_norm = (simulated_acceleration.segment(3, 3)).norm();
+
+	if (acc_angular_norm > acc_angular_max_) {
+		ROS_WARN_STREAM_THROTTLE(1, "high simulated angular acceleration"
+		                         << " norm: " << acc_angular_norm);
+		simulated_acceleration.segment(3, 3) *= (acc_angular_max_ / acc_angular_norm);
+	}
 
 
 	simulated_velocity_ += simulated_acceleration * real_loop_rate_.toSec();
+
+
+	// limiting the velocities for better stability and safety
+	double vel_linear_norm = (simulated_velocity_.segment(0, 3)).norm();
+
+	if (vel_linear_norm > vel_linear_max_) {
+		ROS_WARN_STREAM_THROTTLE(1, "high simulated linear velocity"
+		                         << " norm: " << vel_linear_norm);
+		simulated_velocity_.segment(0, 3) *= (vel_linear_max_ / vel_linear_norm);
+	}
+
+	double vel_angular_norm = (simulated_velocity_.segment(3, 3)).norm();
+
+	if (vel_angular_norm > vel_angular_max_) {
+		ROS_WARN_STREAM_THROTTLE(1, "high simulated angular velocity"
+		                         << " norm: " << vel_angular_norm);
+		simulated_velocity_.segment(3, 3) *= (vel_angular_max_ / vel_angular_norm);
+	}
+
+
+
 
 
 	input_power_ = simulated_velocity_.dot(wrench_input_);
@@ -149,22 +183,22 @@ void PowerPassFilter::ComputeFilteredWrench() {
 
 
 void PowerPassFilter::UpdateInputWrench(const geometry_msgs::Wrench::ConstPtr& msg) {
-	wrench_input_ << msg->force.x, msg->force.y,
-	              msg->force.z, msg->torque.x,
-	              msg->torque.y, msg->torque.z;
+	Vector6d raw_input;
 
-	// // Dead zone for the FT sensor
-	// if (wrench_ft_frame.topRows(3).norm() < force_dead_zone_thres_) {
-	//   wrench_ft_frame.topRows(3).setZero();
-	// }
-	// if (wrench_ft_frame.bottomRows(3).norm() < torque_dead_zone_thres_) {
-	//   wrench_ft_frame.bottomRows(3).setZero();
-	// }
+	raw_input << msg->force.x, msg->force.y,
+	          msg->force.z, msg->torque.x,
+	          msg->torque.y, msg->torque.z;
 
-	// // Filter and update
-	// u_e_ <<  (1 - wrench_filter_factor_) * u_e_ +
-	//      wrench_filter_factor_ * rotation_ft_base * wrench_ft_frame;
+	// Dead zone for the FT sensor
+	if (raw_input.topRows(3).norm() < force_dead_zone_) {
+		raw_input.topRows(3).setZero();
+	}
+	if (raw_input.bottomRows(3).norm() < torque_dead_zone_) {
+		raw_input.bottomRows(3).setZero();
+	}
 
+	// Filter and update
+	wrench_input_ += (1 - filter_rate_) * (raw_input - wrench_input_);
 }
 
 
@@ -203,5 +237,11 @@ void PowerPassFilter::DynRecCallback(ds_admittance_control::PowerPassFilterConfi
 	torque_dead_zone_ = config.torque_dead_zone;
 
 	filter_rate_ = config.filter_rate;
+
+
+	acc_linear_max_ = config.acc_linear_max;
+	acc_angular_max_ = config.acc_angular_max;
+	vel_linear_max_ = config.vel_linear_max;
+	vel_angular_max_ = config.vel_angular_max;
 
 }
