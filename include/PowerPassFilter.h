@@ -53,14 +53,14 @@ private:
 
 
 	// params
-	Matrix6d M_f_, D_f_;
+	Matrix6d M_a_, D_a_;
 
 
 	//dynamic reconfig settig
 	dynamic_reconfigure::Server<ds_admittance_control::PowerPassFilterConfig> dyn_rec_srv_;
 	dynamic_reconfigure::Server<ds_admittance_control::PowerPassFilterConfig>::CallbackType dyn_rec_f_;
 
-	// reconf parameters 
+	// reconf parameters
 	double tank_size_;
 	double energy_trigger_;
 	double dissipation_rate_;
@@ -83,7 +83,9 @@ public:
 	    double frequency,
 	    std::string topic_input_wrench,
 	    std::string topic_output_wrench,
-	    std::string topic_desired_velocity
+	    std::string topic_desired_velocity,
+	    std::vector<double> M_a,
+	    std::vector<double> D_a
 	);
 
 	void Run();

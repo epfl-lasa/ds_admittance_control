@@ -5,12 +5,16 @@ PowerPassFilter::PowerPassFilter(
     double frequency,
     std::string topic_input_wrench,
     std::string topic_output_wrench,
-    std::string topic_desired_velocity
+    std::string topic_desired_velocity,
+    std::vector<double> M_a,
+    std::vector<double> D_a
 )
 	:
 	nh_(n),
 	loop_rate_(frequency),
-	real_loop_rate_(1 / frequency)
+	real_loop_rate_(1 / frequency),
+	M_a_(M_a.data()),
+	D_a_(D_a.data())
 {
 
 
@@ -38,9 +42,6 @@ PowerPassFilter::PowerPassFilter(
 	output_power_ = 0;
 	tank_energy_ = 0;
 
-	M_f_.setIdentity();
-	D_f_.setIdentity();
-
 
 	// initialize reconf parameters, will be overwritten by dyn_reconfigure
 	tank_size_ = 10;
@@ -54,6 +55,29 @@ PowerPassFilter::PowerPassFilter(
 	acc_angular_max_ = 1;
 	vel_linear_max_ = 0.5;
 	vel_angular_max_ = 1;
+
+
+	for (int row = 0; row < 6; row++) {
+		for (int col = 0; col < 6; col++) {
+
+			if (col == row) {
+				if (M_a_(col, row) <= 0 || D_a_(col, row) <= 0) {
+					ROS_ERROR("Diagonal elements of mass and damping matrix should be positive");
+					M_a_(col, row) = 100;
+					M_a_(col, row) = 100;
+				}
+			}
+
+			if (col != row) {
+				if (M_a_(col, row) != 0 || D_a_(col, row) != 0) {
+					ROS_WARN("Mass and damping matrix should be diagonal");
+					M_a_(col, row) = 0;
+					M_a_(col, row) = 0;
+				}
+			}
+		}
+	}
+
 
 }
 
@@ -114,7 +138,7 @@ void PowerPassFilter::SimulateVelocity() {
 
 	Vector6d simulated_acceleration;
 
-	simulated_acceleration = M_f_.inverse() * (- D_f_ * simulated_velocity_ + wrench_input_);
+	simulated_acceleration = M_a_.inverse() * (- D_a_ * simulated_velocity_ + wrench_input_);
 
 
 	// limiting the accelaration for better stability and safety
@@ -194,7 +218,7 @@ void PowerPassFilter::ComputeFilteredWrench() {
 void PowerPassFilter::ComputeAdmittance() {
 	Vector6d acceleration;
 
-	acceleration = M_f_.inverse() * (- D_f_ * desired_velocity_ + wrench_output_);
+	acceleration = M_a_.inverse() * (- D_a_ * desired_velocity_ + wrench_output_);
 
 
 	// limiting the accelaration for better stability and safety
@@ -236,7 +260,7 @@ void PowerPassFilter::ComputeAdmittance() {
 	}
 
 	// maybe this power can be useful to regulate some behavior
-	// final_input_power_ = desired_velocity_.dot(wrench_output_);	
+	// final_input_power_ = desired_velocity_.dot(wrench_output_);
 	// final_input_power_ = real_velocity_.dot(wrench_output_);
 
 }
@@ -279,7 +303,7 @@ void PowerPassFilter::PublishOutputWrench() {
 
 }
 
-void PowerPassFilter::PublishDesiredVelocity(){
+void PowerPassFilter::PublishDesiredVelocity() {
 
 	geometry_msgs::Twist msg;
 	msg.linear.x = desired_velocity_(0);
