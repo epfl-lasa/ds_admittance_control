@@ -34,18 +34,20 @@ PowerPassFilter::PowerPassFilter(
 
 	output_power_ = 0;
 	tank_energy_ = 0;
-	drain_power_ = 10.0 / frequency;
 
 	M_f_.setIdentity();
 	D_f_.setIdentity();
 
+
+	// initialize reconf parameters, will be overwritten by dyn_reconfigure
+	tank_size_ = 10;
+	energy_trigger_ = 9;
+	dissipation_rate_ = 0.1;
+	force_dead_zone_ = 0.1;
+	torque_dead_zone_ = 0.5;
+	filter_rate_ = 0.1;
+
 }
-
-
-void PowerPassFilter::DynRecCallback(ds_admittance_control::PowerPassFilterConfig &config, uint32_t level){
-	
-}
-
 
 
 
@@ -89,7 +91,6 @@ void PowerPassFilter::Run() {
 		ROS_INFO_STREAM_THROTTLE(1, "-------------------------------------------");
 
 
-
 		loop_rate_.sleep();
 		// Integrate for velocity based interface
 		real_loop_rate_ = loop_rate_.expectedCycleTime();
@@ -114,7 +115,6 @@ void PowerPassFilter::SimulateVelocity() {
 	// }
 
 
-
 	simulated_velocity_ += simulated_acceleration * real_loop_rate_.toSec();
 
 
@@ -122,22 +122,20 @@ void PowerPassFilter::SimulateVelocity() {
 
 }
 
+
 void PowerPassFilter::UpdateEnergyTank() {
 
-	tank_energy_ += (input_power_  - output_power_ - drain_power_ ) * real_loop_rate_.toSec();
+	tank_energy_ += (input_power_  - output_power_ - dissipation_rate_ ) * real_loop_rate_.toSec();
 
 	// stay positive
 	tank_energy_ = (tank_energy_ < 0) ? 0 : tank_energy_;
-
-
-
-
 }
+
 
 void PowerPassFilter::ComputeFilteredWrench() {
 
-	if (tank_energy_ > 10) {
-		double alpha = (tank_energy_ - 10 ) / 1;
+	if (tank_energy_ > energy_trigger_) {
+		double alpha = (tank_energy_ - energy_trigger_ ) / (tank_size_ - energy_trigger_);
 		alpha = (alpha > 1) ? 1 : alpha;
 		output_power_ = alpha * input_power_;
 		wrench_output_ = (output_power_ / input_power_) * wrench_input_;
@@ -146,7 +144,6 @@ void PowerPassFilter::ComputeFilteredWrench() {
 		output_power_ = 0;
 		wrench_output_.setZero();
 	}
-
 
 }
 
@@ -168,10 +165,7 @@ void PowerPassFilter::UpdateInputWrench(const geometry_msgs::Wrench::ConstPtr& m
 	// u_e_ <<  (1 - wrench_filter_factor_) * u_e_ +
 	//      wrench_filter_factor_ * rotation_ft_base * wrench_ft_frame;
 
-
-
 }
-
 
 
 void PowerPassFilter::PublishOutputWrench() {
@@ -187,5 +181,27 @@ void PowerPassFilter::PublishOutputWrench() {
 
 	pub_output_wrench_.publish(msg);
 
+}
+
+
+void PowerPassFilter::DynRecCallback(ds_admittance_control::PowerPassFilterConfig &config, uint32_t level) {
+
+	ROS_INFO("Reconfigure request. Updatig the parameters ...");
+
+
+	tank_size_ = config.tank_size;
+	energy_trigger_ = config.trigger;
+
+	if (energy_trigger_ > tank_size_) {
+		ROS_WARN_STREAM("Trigger should be lower than size, setting back to " << tank_size_);
+		energy_trigger_ = tank_size_;
+	}
+
+	dissipation_rate_ = config.dissipation_rate;
+
+	force_dead_zone_ = config.force_dead_zone;
+	torque_dead_zone_ = config.torque_dead_zone;
+
+	filter_rate_ = config.filter_rate;
 
 }

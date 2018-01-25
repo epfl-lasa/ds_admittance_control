@@ -44,7 +44,6 @@ private:
 
 	double input_power_;
 	double output_power_;
-	double drain_power_;
 	double tank_energy_;
 
 
@@ -56,6 +55,17 @@ private:
 	//dynamic reconfig settig
 	dynamic_reconfigure::Server<ds_admittance_control::PowerPassFilterConfig> dyn_rec_srv_;
 	dynamic_reconfigure::Server<ds_admittance_control::PowerPassFilterConfig>::CallbackType dyn_rec_f_;
+
+	// reconf parameters 
+	double tank_size_;
+	double energy_trigger_;
+	double dissipation_rate_;
+	double force_dead_zone_;
+	double torque_dead_zone_;
+	double filter_rate_;
+
+
+
 
 
 public:
