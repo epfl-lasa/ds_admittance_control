@@ -7,14 +7,16 @@ PowerPassFilter::PowerPassFilter(
     std::string topic_output_wrench,
     std::string topic_desired_velocity,
     std::vector<double> M_a,
-    std::vector<double> D_a
+    std::vector<double> D_a,
+    std::vector<double> ft_rotation
 )
 	:
 	nh_(n),
 	loop_rate_(frequency),
 	real_loop_rate_(1 / frequency),
 	M_a_(M_a.data()),
-	D_a_(D_a.data())
+	D_a_(D_a.data()),
+	ft_rotation_(ft_rotation.data())
 {
 
 
@@ -49,7 +51,8 @@ PowerPassFilter::PowerPassFilter(
 	dissipation_rate_ = 0.1;
 	force_dead_zone_ = 0.1;
 	torque_dead_zone_ = 0.5;
-	filter_rate_ = 0.1;
+	force_filter_rate_ = 0.1;
+	vel_filter_rate_ = 0.1;
 
 	acc_linear_max_ = 4;
 	acc_angular_max_ = 1;
@@ -216,6 +219,7 @@ void PowerPassFilter::ComputeFilteredWrench() {
 
 
 void PowerPassFilter::ComputeAdmittance() {
+	
 	Vector6d acceleration;
 
 	acceleration = M_a_.inverse() * (- D_a_ * desired_velocity_ + wrench_output_);
@@ -266,14 +270,15 @@ void PowerPassFilter::ComputeAdmittance() {
 }
 
 
-
-
 void PowerPassFilter::UpdateInputWrench(const geometry_msgs::WrenchStamped::ConstPtr& msg) {
 	Vector6d raw_input;
 
 	raw_input << msg->wrench.force.x, msg->wrench.force.y,
 	          msg->wrench.force.z, msg->wrench.torque.x,
 	          msg->wrench.torque.y, msg->wrench.torque.z;
+
+	raw_input.topRows(3)    << ft_rotation_ * raw_input.topRows(3);
+	raw_input.bottomRows(3) << ft_rotation_ * raw_input.bottomRows(3);
 
 	// Dead zone for the FT sensor
 	if (raw_input.topRows(3).norm() < force_dead_zone_) {
@@ -284,7 +289,7 @@ void PowerPassFilter::UpdateInputWrench(const geometry_msgs::WrenchStamped::Cons
 	}
 
 	// Filter and update
-	wrench_input_ += (1 - filter_rate_) * (raw_input - wrench_input_);
+	wrench_input_ += (1 - force_filter_rate_) * (raw_input - wrench_input_);
 }
 
 
@@ -335,7 +340,8 @@ void PowerPassFilter::DynRecCallback(ds_admittance_control::PowerPassFilterConfi
 	force_dead_zone_ = config.force_dead_zone;
 	torque_dead_zone_ = config.torque_dead_zone;
 
-	filter_rate_ = config.filter_rate;
+	force_filter_rate_ = config.force_filter_rate;
+	vel_filter_rate_ = config.vel_filter_rate;
 
 
 	acc_linear_max_ = config.acc_linear_max;

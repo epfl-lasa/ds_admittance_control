@@ -24,6 +24,7 @@ using namespace Eigen;
 
 typedef Matrix<double, 6, 1> Vector6d;
 typedef Matrix<double, 6, 6> Matrix6d;
+typedef Matrix<double, 3, 3> Matrix3d;
 
 class PowerPassFilter {
 
@@ -54,6 +55,7 @@ private:
 
 	// params
 	Matrix6d M_a_, D_a_;
+	Matrix3d ft_rotation_;
 
 
 	//dynamic reconfig settig
@@ -66,7 +68,8 @@ private:
 	double dissipation_rate_;
 	double force_dead_zone_;
 	double torque_dead_zone_;
-	double filter_rate_;
+	double force_filter_rate_;
+	double vel_filter_rate_;
 
 	double acc_linear_max_;
 	double acc_angular_max_;
@@ -85,7 +88,8 @@ public:
 	    std::string topic_output_wrench,
 	    std::string topic_desired_velocity,
 	    std::vector<double> M_a,
-	    std::vector<double> D_a
+	    std::vector<double> D_a,
+	    std::vector<double> ft_rotation
 	);
 
 	void Run();

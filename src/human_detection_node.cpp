@@ -15,6 +15,7 @@ int main(int argc, char **argv)
 
   std::vector<double> M_a;
   std::vector<double> D_a;
+  std::vector<double> ft_rotation;
 
 
   if (!nh.getParam("topic_external_wrench", topic_external_wrench))   {
@@ -35,13 +36,17 @@ int main(int argc, char **argv)
   if (!nh.getParam("mass", M_a)) {
     ROS_ERROR("Couldn't retrieve the admittance mass.");
     return -1;
-}
-
+  }
 
   if (!nh.getParam("damping", D_a)) {
     ROS_ERROR("Couldn't retrieve the admittance damping.");
     return -1;
-}
+  }
+
+  if (!nh.getParam("ft_sensor_rotation", ft_rotation)) {
+    ROS_ERROR("Couldn't retrieve the rotation matrix for ft-sensor.");
+    return -1;
+  }
 
 
   PowerPassFilter human_detector(nh,
@@ -50,7 +55,8 @@ int main(int argc, char **argv)
                                  topic_human_wrench,
                                  topic_desired_velocity,
                                  M_a,
-                                 D_a);
+                                 D_a,
+                                 ft_rotation);
 
   human_detector.Run();
 
