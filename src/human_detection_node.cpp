@@ -10,8 +10,10 @@ int main(int argc, char **argv)
 
   // Parameters
   std::string topic_external_wrench;
+  std::string topic_external_wrench_filtered;
   std::string topic_human_wrench;
   std::string topic_desired_velocity;
+  std::string topic_tank_state;
 
   std::vector<double> M_a;
   std::vector<double> D_a;
@@ -23,6 +25,11 @@ int main(int argc, char **argv)
     return -1;
   }
 
+  if (!nh.getParam("topic_external_wrench_filtered", topic_external_wrench_filtered))   {
+    ROS_ERROR("Couldn't retrieve the topic name for the external wrench. ");
+    return -1;
+  }
+
   if (!nh.getParam("topic_human_wrench", topic_human_wrench))   {
     ROS_ERROR("Couldn't retrieve the topic name for the human wrench. ");
     return -1;
@@ -30,6 +37,11 @@ int main(int argc, char **argv)
 
   if (!nh.getParam("topic_desired_velocity", topic_desired_velocity))   {
     ROS_ERROR("Couldn't retrieve the topic name for the desired velocity. ");
+    return -1;
+  }
+
+  if (!nh.getParam("topic_tank_state", topic_tank_state))   {
+    ROS_ERROR("Couldn't retrieve the topic name for the state of the tank. ");
     return -1;
   }
 
@@ -52,8 +64,10 @@ int main(int argc, char **argv)
   PowerPassFilter human_detector(nh,
                                  frequency,
                                  topic_external_wrench,
+                                 topic_external_wrench_filtered,
                                  topic_human_wrench,
                                  topic_desired_velocity,
+                                 topic_tank_state,
                                  M_a,
                                  D_a,
                                  ft_rotation);

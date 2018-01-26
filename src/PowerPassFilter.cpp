@@ -4,8 +4,10 @@ PowerPassFilter::PowerPassFilter(
     ros::NodeHandle &n,
     double frequency,
     std::string topic_input_wrench,
+    std::string topic_input_wrench_filtered,
     std::string topic_output_wrench,
     std::string topic_desired_velocity,
+    std::string topic_tank_state,
     std::vector<double> M_a,
     std::vector<double> D_a,
     std::vector<double> ft_rotation
@@ -24,9 +26,13 @@ PowerPassFilter::PowerPassFilter(
 	                                  &PowerPassFilter::UpdateInputWrench, this,
 	                                  ros::TransportHints().reliable().tcpNoDelay());
 
+	pub_input_wrench_filtered_ = nh_.advertise<geometry_msgs::Wrench>(topic_input_wrench_filtered, 1);
+
 	pub_output_wrench_ = nh_.advertise<geometry_msgs::Wrench>(topic_output_wrench, 1);
 
 	pub_desired_velocity_ = nh_.advertise<geometry_msgs::Twist>(topic_desired_velocity, 1);
+
+	pub_tank_state_ = nh_.advertise<std_msgs::Float32>(topic_tank_state, 1);
 
 
 	dyn_rec_f_ = boost::bind(&PowerPassFilter::DynRecCallback, this, _1, _2);
@@ -40,8 +46,8 @@ PowerPassFilter::PowerPassFilter(
 	desired_velocity_.setZero();
 
 	input_power_ = 0;
-
 	output_power_ = 0;
+	dissipate_power_ = 0;
 	tank_energy_ = 0;
 
 
@@ -190,10 +196,15 @@ void PowerPassFilter::SimulateVelocity() {
 
 void PowerPassFilter::UpdateEnergyTank() {
 
-	tank_energy_ += (input_power_  - output_power_ - dissipation_rate_ ) * real_loop_rate_.toSec();
+	// tank_energy_ += (input_power_  - output_power_ - dissipation_rate_ ) * real_loop_rate_.toSec();
+	tank_energy_ += (input_power_  - output_power_ - dissipate_power_ ) * real_loop_rate_.toSec();
 
 	// stay positive
 	tank_energy_ = (tank_energy_ < 0) ? 0 : tank_energy_;
+
+	std_msgs::Float32 msg;
+	msg.data = tank_energy_;
+	pub_tank_state_.publish(msg);
 }
 
 
@@ -203,15 +214,21 @@ void PowerPassFilter::ComputeFilteredWrench() {
 		double alpha = (tank_energy_ - energy_trigger_ ) / (tank_size_ - energy_trigger_);
 		alpha = (alpha > 1) ? 1 : alpha;
 		output_power_ = alpha * input_power_;
-		if (input_power_ != 0) {
-			wrench_output_ = (output_power_ / input_power_) * wrench_input_;
-		}
-		else {
-			wrench_output_.setZero();
-		}
+		wrench_output_ = alpha * wrench_input_;
+		dissipate_power_ = (1 - alpha) * dissipation_rate_;
+
+
+
+		// if (input_power_ != 0) {
+		// 	wrench_output_ = (output_power_ / input_power_) * wrench_input_;
+		// }
+		// else {
+		// 	wrench_output_.setZero();
+		// }
 	}
 	else {
 		output_power_ = 0;
+		dissipate_power_ = dissipation_rate_;
 		wrench_output_.setZero();
 	}
 
@@ -219,7 +236,7 @@ void PowerPassFilter::ComputeFilteredWrench() {
 
 
 void PowerPassFilter::ComputeAdmittance() {
-	
+
 	Vector6d acceleration;
 
 	acceleration = M_a_.inverse() * (- D_a_ * desired_velocity_ + wrench_output_);
@@ -290,6 +307,17 @@ void PowerPassFilter::UpdateInputWrench(const geometry_msgs::WrenchStamped::Cons
 
 	// Filter and update
 	wrench_input_ += (1 - force_filter_rate_) * (raw_input - wrench_input_);
+
+
+	geometry_msgs::Wrench msg_back;
+	msg_back.force.x  = wrench_input_(0);
+	msg_back.force.y  = wrench_input_(1);
+	msg_back.force.z  = wrench_input_(2);
+	msg_back.torque.x = wrench_input_(3);
+	msg_back.torque.y = wrench_input_(4);
+	msg_back.torque.z = wrench_input_(5);
+	pub_input_wrench_filtered_.publish(msg_back);
+
 }
 
 

@@ -5,6 +5,7 @@
 #include "geometry_msgs/Wrench.h"
 #include "geometry_msgs/WrenchStamped.h"
 #include "geometry_msgs/Twist.h"
+#include "std_msgs/Float32.h"
 
 // #include "geometry_msgs/Pose2D.h"
 // #include "std_msgs/Int32.h"
@@ -37,8 +38,11 @@ private:
 
 
 	ros::Subscriber sub_input_wrench_;
+
+	ros::Publisher  pub_input_wrench_filtered_;
 	ros::Publisher  pub_output_wrench_;
 	ros::Publisher  pub_desired_velocity_;
+	ros::Publisher  pub_tank_state_;
 
 
 	Vector6d wrench_input_;
@@ -49,6 +53,7 @@ private:
 
 	double input_power_;
 	double output_power_;
+	double dissipate_power_;
 	double tank_energy_;
 
 
@@ -85,8 +90,10 @@ public:
 	    ros::NodeHandle &n,
 	    double frequency,
 	    std::string topic_input_wrench,
+	    std::string topic_input_wrench_filtered,
 	    std::string topic_output_wrench,
 	    std::string topic_desired_velocity,
+	    std::string topic_tank_state,
 	    std::vector<double> M_a,
 	    std::vector<double> D_a,
 	    std::vector<double> ft_rotation
