@@ -3,46 +3,15 @@
 
 
   <group ns="human_detection">
-    <param name="topic_external_wrench" value="/ft_sensor/netft_data"/>
-    <param name="topic_external_wrench_filtered" value="/admittance/external_wrench"/>
-    <param name="topic_human_wrench" value="/admittance/human_wrench"/>
-    <param name="topic_desired_velocity" value="/lwr/joint_controllers/passive_ds_command_vel" />
+    <param name="topic_external_wrench" value="/admittance_control/transformed/external_wrench"/>
+    <param name="topic_admittance_ratio" value="/admittance_control/admittance_ratio" />
     <param name="topic_tank_state" value="/admittance/tank_state"/>
+    <param name="topic_admittance_ratio" value="/admittance_control/admittance_ratio"/>
     <rosparam command="load" file="$(find ds_admittance_control)/config/admittance_param.yml"/>   
     <node name="human_detection" pkg="ds_admittance_control" type="human_detection_node" output="screen"/>
   </group>
 
   <node name="reconfigure" pkg="rqt_reconfigure" type="rqt_reconfigure" output="screen" />
-
-
-  <node pkg="rostopic" type="rostopic" name="angle_setting" 
-    args="pub /lwr/joint_controllers/passive_ds_command_orient geometry_msgs/Quaternion '{x: 0.0, y: 1.0, z: 0.0, w: 0.0}' -r 100" />
-
-
-
-
-
-
-
-  <group ns="ft_sensor">
-
-    <arg  name="ip_address"  default="128.178.145.248"/>
-    <arg  name="bias"        default="False"/>
-    <arg  name="rate"        default="100"/>  
-    <arg  name="frame_id"    default="myframe"/>
-    <arg  name="alpha"       default="0" /> 
-    <arg  name="rot"         default="0"/>
-    <arg  name="scale_x"     default="1"/>
-    <arg  name="scale_y"     default="1"/>
-    <arg  name="scale_z"     default="1"/>
-
-    <param name="frame_id" type="str" value="$(arg frame_id)"/>
-    <node name="force_torque_sensor" pkg="netft_rdt_driver" type="netft_node" 
-        args="--address $(arg ip_address) --rate $(arg rate) --bias $(arg bias) --rot $(arg rot) --alpha $(arg alpha) --scale_x $(arg scale_x) --scale_y $(arg scale_y) --scale_z $(arg scale_z)" 
-       required="true" output="screen"/>
-  </group>
-
-  <node name="ft_offset"  pkg="rosservice" type="rosservice" args="call --wait /ft_sensor/bias_cmd '{cmd: 'bias'}'"/>
 
 
 

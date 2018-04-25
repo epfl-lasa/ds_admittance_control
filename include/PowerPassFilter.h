@@ -38,18 +38,12 @@ private:
 
 
 	ros::Subscriber sub_input_wrench_;
-
-	ros::Publisher  pub_input_wrench_filtered_;
-	ros::Publisher  pub_output_wrench_;
-	ros::Publisher  pub_desired_velocity_;
 	ros::Publisher  pub_tank_state_;
-
+	ros::Publisher  pub_admittance_ratio_;
 
 	Vector6d wrench_input_;
-	Vector6d wrench_output_;
 
 	Vector6d simulated_velocity_;
-	Vector6d desired_velocity_;
 
 	double input_power_;
 	double output_power_;
@@ -57,10 +51,8 @@ private:
 	double tank_energy_;
 
 
-
 	// params
 	Matrix6d M_a_, D_a_;
-	Matrix3d ft_rotation_;
 
 
 	//dynamic reconfig settig
@@ -71,10 +63,6 @@ private:
 	double tank_size_;
 	double energy_trigger_;
 	double dissipation_rate_;
-	double force_dead_zone_;
-	double torque_dead_zone_;
-	double force_filter_rate_;
-	double vel_filter_rate_;
 
 	double acc_linear_max_;
 	double acc_angular_max_;
@@ -90,13 +78,10 @@ public:
 	    ros::NodeHandle &n,
 	    double frequency,
 	    std::string topic_input_wrench,
-	    std::string topic_input_wrench_filtered,
-	    std::string topic_output_wrench,
-	    std::string topic_desired_velocity,
 	    std::string topic_tank_state,
+	    std::string topic_admittance_ratio,
 	    std::vector<double> M_a,
-	    std::vector<double> D_a,
-	    std::vector<double> ft_rotation
+	    std::vector<double> D_a
 	);
 
 	void Run();
@@ -105,13 +90,9 @@ public:
 private:
 
 	void UpdateInputWrench(const geometry_msgs::WrenchStamped::ConstPtr& msg);
-	void PublishOutputWrench();
 	void SimulateVelocity();
 	void UpdateEnergyTank();
-	void ComputeFilteredWrench();
 	void DynRecCallback(ds_admittance_control::PowerPassFilterConfig &config, uint32_t level);
-	void ComputeAdmittance();
-	void PublishDesiredVelocity();
 
 
 

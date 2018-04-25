@@ -4,21 +4,17 @@ PowerPassFilter::PowerPassFilter(
     ros::NodeHandle &n,
     double frequency,
     std::string topic_input_wrench,
-    std::string topic_input_wrench_filtered,
-    std::string topic_output_wrench,
-    std::string topic_desired_velocity,
     std::string topic_tank_state,
+    std::string topic_admittance_ratio,
     std::vector<double> M_a,
-    std::vector<double> D_a,
-    std::vector<double> ft_rotation
+    std::vector<double> D_a
 )
 	:
 	nh_(n),
 	loop_rate_(frequency),
 	real_loop_rate_(1 / frequency),
 	M_a_(M_a.data()),
-	D_a_(D_a.data()),
-	ft_rotation_(ft_rotation.data())
+	D_a_(D_a.data())
 {
 
 
@@ -26,13 +22,9 @@ PowerPassFilter::PowerPassFilter(
 	                                  &PowerPassFilter::UpdateInputWrench, this,
 	                                  ros::TransportHints().reliable().tcpNoDelay());
 
-	pub_input_wrench_filtered_ = nh_.advertise<geometry_msgs::Wrench>(topic_input_wrench_filtered, 1);
-
-	pub_output_wrench_ = nh_.advertise<geometry_msgs::Wrench>(topic_output_wrench, 1);
-
-	pub_desired_velocity_ = nh_.advertise<geometry_msgs::Twist>(topic_desired_velocity, 1);
-
 	pub_tank_state_ = nh_.advertise<std_msgs::Float32>(topic_tank_state, 1);
+
+	pub_admittance_ratio_ = nh_.advertise<std_msgs::Float32>(topic_admittance_ratio, 1);
 
 
 	dyn_rec_f_ = boost::bind(&PowerPassFilter::DynRecCallback, this, _1, _2);
@@ -40,10 +32,7 @@ PowerPassFilter::PowerPassFilter(
 
 
 	wrench_input_.setZero();
-	wrench_output_.setZero();
-
 	simulated_velocity_.setZero();
-	desired_velocity_.setZero();
 
 	input_power_ = 0;
 	output_power_ = 0;
@@ -52,13 +41,9 @@ PowerPassFilter::PowerPassFilter(
 
 
 	// initialize reconf parameters, will be overwritten by dyn_reconfigure
-	tank_size_ = 10;
-	energy_trigger_ = 9;
-	dissipation_rate_ = 0.1;
-	force_dead_zone_ = 0.1;
-	torque_dead_zone_ = 0.5;
-	force_filter_rate_ = 0.1;
-	vel_filter_rate_ = 0.1;
+	tank_size_ = 4;
+	energy_trigger_ = 2;
+	dissipation_rate_ = 2.5;
 
 	acc_linear_max_ = 4;
 	acc_angular_max_ = 1;
@@ -100,15 +85,6 @@ void PowerPassFilter::Run() {
 
 		UpdateEnergyTank();
 
-		ComputeFilteredWrench();
-
-		PublishOutputWrench();
-
-		ComputeAdmittance();
-
-		PublishDesiredVelocity();
-
-
 
 
 		ROS_INFO_STREAM_THROTTLE(1, "Running at             : " << real_loop_rate_.toSec());
@@ -124,13 +100,6 @@ void PowerPassFilter::Run() {
 		                         wrench_input_(4) << "\t" <<
 		                         wrench_input_(5) );
 
-		ROS_INFO_STREAM_THROTTLE(1, "output Wrench          : " <<
-		                         wrench_output_(0) << "\t" <<
-		                         wrench_output_(1) << "\t" <<
-		                         wrench_output_(2) << "\t" <<
-		                         wrench_output_(3) << "\t" <<
-		                         wrench_output_(4) << "\t" <<
-		                         wrench_output_(5) );
 
 		ROS_INFO_STREAM_THROTTLE(1, "-------------------------------------------");
 
@@ -205,84 +174,29 @@ void PowerPassFilter::UpdateEnergyTank() {
 	std_msgs::Float32 msg;
 	msg.data = tank_energy_;
 	pub_tank_state_.publish(msg);
-}
 
+	double alpha;
 
-void PowerPassFilter::ComputeFilteredWrench() {
+	if(tank_energy_ > 0.99 * tank_size_){
+		ROS_WARN_STREAM_THROTTLE(1,"Tank energy (" << tank_energy_ << ") higher than maximum (" << tank_size_ << ")" );
+		tank_energy_ = 0.99 * tank_size_;
+	}
 
 	if (tank_energy_ > energy_trigger_) {
-		double alpha = (tank_energy_ - energy_trigger_ ) / (tank_size_ - energy_trigger_);
+		alpha = (tank_energy_ - energy_trigger_ ) / (tank_size_ - energy_trigger_);
 		alpha = (alpha > 1) ? 1 : alpha;
 		output_power_ = alpha * input_power_;
-		wrench_output_ = alpha * wrench_input_;
 		dissipate_power_ = (1 - alpha) * dissipation_rate_;
-
-
-
-		// if (input_power_ != 0) {
-		// 	wrench_output_ = (output_power_ / input_power_) * wrench_input_;
-		// }
-		// else {
-		// 	wrench_output_.setZero();
-		// }
 	}
 	else {
+		alpha = 0;
 		output_power_ = 0;
 		dissipate_power_ = dissipation_rate_;
-		wrench_output_.setZero();
 	}
 
-}
-
-
-void PowerPassFilter::ComputeAdmittance() {
-
-	Vector6d acceleration;
-
-	acceleration = M_a_.inverse() * (- D_a_ * desired_velocity_ + wrench_output_);
-
-
-	// limiting the accelaration for better stability and safety
-	double acc_linear_norm = (acceleration.segment(0, 3)).norm();
-
-	if (acc_linear_norm > acc_linear_max_) {
-		ROS_WARN_STREAM_THROTTLE(1, "high simulated linear acceleration"
-		                         << " norm: " << acc_linear_norm);
-		acceleration.segment(0, 3) *= (acc_linear_max_ / acc_linear_norm);
-	}
-
-	double acc_angular_norm = (acceleration.segment(3, 3)).norm();
-
-	if (acc_angular_norm > acc_angular_max_) {
-		ROS_WARN_STREAM_THROTTLE(1, "high simulated angular acceleration"
-		                         << " norm: " << acc_angular_norm);
-		acceleration.segment(3, 3) *= (acc_angular_max_ / acc_angular_norm);
-	}
-
-
-	desired_velocity_ += acceleration * real_loop_rate_.toSec();
-
-
-	// limiting the velocities for better stability and safety
-	double vel_linear_norm = (desired_velocity_.segment(0, 3)).norm();
-
-	if (vel_linear_norm > vel_linear_max_) {
-		ROS_WARN_STREAM_THROTTLE(1, "high simulated linear velocity"
-		                         << " norm: " << vel_linear_norm);
-		desired_velocity_.segment(0, 3) *= (vel_linear_max_ / vel_linear_norm);
-	}
-
-	double vel_angular_norm = (desired_velocity_.segment(3, 3)).norm();
-
-	if (vel_angular_norm > vel_angular_max_) {
-		ROS_WARN_STREAM_THROTTLE(1, "high simulated angular velocity"
-		                         << " norm: " << vel_angular_norm);
-		desired_velocity_.segment(3, 3) *= (vel_angular_max_ / vel_angular_norm);
-	}
-
-	// maybe this power can be useful to regulate some behavior
-	// final_input_power_ = desired_velocity_.dot(wrench_output_);
-	// final_input_power_ = real_velocity_.dot(wrench_output_);
+	std_msgs::Float32 msg_h;
+	msg_h.data = alpha;
+	pub_admittance_ratio_.publish(msg_h);
 
 }
 
@@ -290,64 +204,14 @@ void PowerPassFilter::ComputeAdmittance() {
 void PowerPassFilter::UpdateInputWrench(const geometry_msgs::WrenchStamped::ConstPtr& msg) {
 	Vector6d raw_input;
 
-	raw_input << msg->wrench.force.x, msg->wrench.force.y,
-	          msg->wrench.force.z, msg->wrench.torque.x,
-	          msg->wrench.torque.y, msg->wrench.torque.z;
-
-	raw_input.topRows(3)    << ft_rotation_ * raw_input.topRows(3);
-	raw_input.bottomRows(3) << ft_rotation_ * raw_input.bottomRows(3);
-
-	// Dead zone for the FT sensor
-	if (raw_input.topRows(3).norm() < force_dead_zone_) {
-		raw_input.topRows(3).setZero();
-	}
-	if (raw_input.bottomRows(3).norm() < torque_dead_zone_) {
-		raw_input.bottomRows(3).setZero();
-	}
-
-	// Filter and update
-	wrench_input_ += (1 - force_filter_rate_) * (raw_input - wrench_input_);
-
-
-	geometry_msgs::Wrench msg_back;
-	msg_back.force.x  = wrench_input_(0);
-	msg_back.force.y  = wrench_input_(1);
-	msg_back.force.z  = wrench_input_(2);
-	msg_back.torque.x = wrench_input_(3);
-	msg_back.torque.y = wrench_input_(4);
-	msg_back.torque.z = wrench_input_(5);
-	pub_input_wrench_filtered_.publish(msg_back);
+	wrench_input_ << msg->wrench.force.x, msg->wrench.force.y,
+	              msg->wrench.force.z, msg->wrench.torque.x,
+	              msg->wrench.torque.y, msg->wrench.torque.z;
 
 }
 
 
-void PowerPassFilter::PublishOutputWrench() {
 
-	geometry_msgs::Wrench msg;
-
-	msg.force.x  = wrench_output_(0);
-	msg.force.y  = wrench_output_(1);
-	msg.force.z  = wrench_output_(2);
-	msg.torque.x = wrench_output_(3);
-	msg.torque.y = wrench_output_(4);
-	msg.torque.z = wrench_output_(5);
-
-	pub_output_wrench_.publish(msg);
-
-}
-
-void PowerPassFilter::PublishDesiredVelocity() {
-
-	geometry_msgs::Twist msg;
-	msg.linear.x = desired_velocity_(0);
-	msg.linear.y = desired_velocity_(1);
-	msg.linear.z = desired_velocity_(2);
-	msg.angular.x = desired_velocity_(3);
-	msg.angular.y = desired_velocity_(4);
-	msg.angular.z = desired_velocity_(5);
-
-	pub_desired_velocity_.publish(msg);
-}
 
 
 void PowerPassFilter::DynRecCallback(ds_admittance_control::PowerPassFilterConfig &config, uint32_t level) {
@@ -364,13 +228,6 @@ void PowerPassFilter::DynRecCallback(ds_admittance_control::PowerPassFilterConfi
 	}
 
 	dissipation_rate_ = config.dissipation_rate;
-
-	force_dead_zone_ = config.force_dead_zone;
-	torque_dead_zone_ = config.torque_dead_zone;
-
-	force_filter_rate_ = config.force_filter_rate;
-	vel_filter_rate_ = config.vel_filter_rate;
-
 
 	acc_linear_max_ = config.acc_linear_max;
 	acc_angular_max_ = config.acc_angular_max;
