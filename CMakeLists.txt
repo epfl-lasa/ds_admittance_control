@@ -147,6 +147,10 @@ add_executable(human_detection_node
   include/PowerPassFilter.h
   )
 
+add_executable(varAdmittance_recorder
+  src/variableAdmittanceRecorder_node.cpp
+  )
+
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use
@@ -162,6 +166,11 @@ add_dependencies(human_detection_node
 	${catkin_EXPORTED_TARGETS}
 )
 
+add_dependencies(varAdmittance_recorder  
+  ${${PROJECT_NAME}_EXPORTED_TARGETS} 
+  ${catkin_EXPORTED_TARGETS}
+)
+
 
 ## Specify libraries to link a library or executable target against
 # target_link_libraries(${PROJECT_NAME}_node
@@ -169,6 +178,9 @@ add_dependencies(human_detection_node
 # )
 
 target_link_libraries(human_detection_node ${catkin_LIBRARIES} )
+
+target_link_libraries(varAdmittance_recorder ${catkin_LIBRARIES} )
+
 
 #############
 ## Install ##
